@@ -9,7 +9,7 @@ on:
     - cron: "0 20 * * *"
   push:
     branches:
-      - main
+      - master
       - v*
   pull_request_target:
     types:
