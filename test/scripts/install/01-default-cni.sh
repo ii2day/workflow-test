@@ -68,7 +68,6 @@ function install_calico() {
         ${SED_COMMAND} -i "s/<<${KEY}>>/${VALUE}/g" ${PROJECT_ROOT_PATH}/.tmp/config/calico.yaml
     done
 
-
     CALICO_IMAGE_LIST=`cat ${PROJECT_ROOT_PATH}/.tmp/config/calico.yaml | grep 'image: ' | tr -d '"' | awk '{print $2}'`
     [ -z "${CALICO_IMAGE_LIST}" ] && echo "can't found image of calico" && exit 1
     LOCAL_IMAGE_LIST=`docker images | awk '{printf("%s:%s\n",$1,$2)}'`
