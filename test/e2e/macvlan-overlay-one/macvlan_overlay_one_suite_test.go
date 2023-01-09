@@ -73,6 +73,7 @@ var _ = BeforeSuite(func() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*common.CtxTimeout)
 	defer cancel()
+
 	nodeList, err := frame.GetNodeList()
 	Expect(err).NotTo(HaveOccurred())
 	err = frame.WaitPodListRunning(spiderDoctorAgent.Spec.Selector.MatchLabels, len(nodeList.Items), ctx)
