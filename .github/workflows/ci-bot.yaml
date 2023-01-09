@@ -62,7 +62,7 @@ env:
     cyclinder
     weizhoublue
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  GH_REPOSITORY: ${{ github.repository }}
+  GH_REPOSITORY: roronoa-z3r0
 jobs:
   issue_opened:
     name: Issue Opened

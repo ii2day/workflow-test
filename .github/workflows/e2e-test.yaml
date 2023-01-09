@@ -162,7 +162,7 @@ jobs:
     steps:
       - name: echo
         run: |
-          echo ${{ github.repository }}
+          echo roronoa-z3r0
           echo ${{ github.repository_owner }}
           echo "TIMESTAMP=`date +%Y-%m-%d`" >> $GITHUB_ENV
       - name: create an issue
@@ -171,6 +171,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: "Auto E2E CI ${{ ENV.TIMESTAMP }}: Failed(Auto Create)"
           body: |
-            action url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            action url: ${{ github.server_url }}/roronoa-z3r0/actions/runs/${{ github.run_id }}
           labels: "kind/bug"
           assignees: "cyclinder"

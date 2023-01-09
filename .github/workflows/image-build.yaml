@@ -100,7 +100,7 @@ jobs:
         with:
           context: ./
           push: true
-          tags: ghcr.io/${{ github.repository }}/meta-plugins:${{ steps.tag.outputs.version }}
+          tags: ghcr.io/roronoa-z3r0/meta-plugins:${{ steps.tag.outputs.version }}
           file: ./images/Dockerfile
           github-token: ${{ secrets.WELAN_PAT }}
           platforms: ${{ env.BUILD_PLATFORM }}
@@ -115,7 +115,7 @@ jobs:
         with:
           context: ./
           push: false
-          tags: ghcr.io/${{ github.repository }}/meta-plugins-ci:${{ steps.tag.outputs.version }}
+          tags: ghcr.io/roronoa-z3r0/meta-plugins-ci:${{ steps.tag.outputs.version }}
           file: ./images/Dockerfile
           github-token: ${{ secrets.GITHUB_TOKEN }}
           platforms: linux/amd64
@@ -129,8 +129,8 @@ jobs:
         if: ${{ steps.tag.outputs.push != 'true' }}
         run: |
           docker images
-          docker save -o /tmp/ci-images.tar ghcr.io/${{ github.repository }}/meta-plugins-ci:${{ steps.tag.outputs.version }}
-          make lint_image_trivy -e IMAGE_NAME=ghcr.io/${{ github.repository }}/meta-plugins-ci:${{ steps.tag.outputs.version }}
+          docker save -o /tmp/ci-images.tar ghcr.io/roronoa-z3r0/meta-plugins-ci:${{ steps.tag.outputs.version }}
+          make lint_image_trivy -e IMAGE_NAME=ghcr.io/roronoa-z3r0/meta-plugins-ci:${{ steps.tag.outputs.version }}
 
       - name: Upload artifact e2e image tar
         if: ${{ steps.tag.outputs.push != 'true' }}
