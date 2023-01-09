@@ -1,0 +1,200 @@
+name: Auto release
+
+env:
+  ONLINE_REGISTER: ghcr.io
+  BUILD_PLATFORM: linux/amd64,linux/arm64
+  ONLINE_REGISTER_USER: ${{ github.actor }}
+  ONLINE_REGISTER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+  MERGE_BRANCH: gh-pages
+  PR_REVIWER: cyclinder
+  PR_LABEL: kind/bug
+
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'tag, sha, branch'
+        required: true
+        default: v1.0.0
+
+jobs:
+  get_ref:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_ref.outputs.tag }}
+    steps:
+      - name: Get Ref
+        id: get_ref
+        run: |
+          tag=""
+          if ${{ github.event_name == 'workflow_dispatch' }} ; then
+            echo "call by self workflow_dispatch"
+            # check tag if valid
+            grep -Eo "v[0-9]+.[0-9]+.[0-9]" <<< ${{ github.event.inputs.tag }} || ' echo "input tag invalid!"; exit 1 '
+            tag=${{ github.event.inputs.tag }}
+            echo ::set-output name=branch::main
+          elif ${{ github.event_name == 'push' }} ; then
+            echo "call by push tag"
+            tag=${GITHUB_REF##*/}
+            echo ::set-output name=branch::${GITHUB_REF##*/}
+          else
+            echo "unexpected event: ${{ github.event_name }}"
+            exit 1
+          fi
+
+          echo "tag: ${tag}"
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+          Ybranch=$(grep -Eo "v[0-9]+\.[0-9]+\.0" <<< "${tag}") ||  echo "no create Ybranch..."
+          echo "Ybranch: ${Ybranch} "
+          if [ -n "${Ybranch}" ] ; then
+             echo "create Ybranch..."
+             echo "create_Ybranch=true" >> $GITHUB_OUTPUT
+          else
+             echo "create_Ybranch=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.get_ref.outputs.branch }}
+
+      - name: Create branch
+        if: ${{ steps.get_ref.outputs.create_Ybranch == 'true' }}
+        uses: peterjgrainger/action-create-branch@v2.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          branch: 'release-${{ steps.get_ref.outputs.tag }}'
+          sha: '${{ github.sha }}'
+
+  call-bin-workflow:
+    needs: get_ref
+    uses: ./.github/workflows/bin-build.yaml
+    with:
+      tag: ${{ needs.get_ref.outputs.tag }}
+    secrets: inherit
+
+  call-image-workflow:
+    needs: get_ref
+    uses: ./.github/workflows/image-build.yaml
+    with:
+      ref: ${{ needs.get_ref.outputs.tag }}
+      push: true
+    secrets: inherit
+
+  create-binary-release:
+    runs-on: ubuntu-latest
+    name: Create Binary Release
+    needs: [get_ref,call-bin-workflow,call-image-workflow]
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: binary_files
+          path: ./
+
+      - name: Create Release
+        id: create_release
+        uses: ncipollo/release-action@v1.9.0
+        with:
+          artifacts: "*.tar"
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          generateReleaseNotes: true
+          artifactErrorsFailBuild: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ needs.get_ref.outputs.tag }}
+          name: "Release ${{ needs.get_ref.outputs.tag }}"
+
+  Generate-Changelog-to-file:
+    runs-on: ubuntu-latest
+    name: Generate Changelog
+    needs: [create-binary-release]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.MERGE_BRANCH }}
+          persist-credentials: "true"
+
+      - name: Save release-note to file
+        id: save
+        run: |
+            latest_release=$(curl -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest |yq '.name')
+            latest_release=`echo ${latest_release} | awk '{print $2}'`
+            echo "release=${latest_release}" >> $GITHUB_OUTPUT
+            curl \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest |yq '.body' > changelog-${latest_release}.md
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4.2.0
+        with:
+          title: "robot Update changelog-${{ .steps.save.outputs.latest_release }}.md to branch ${{ env.MERGE_BRANCH }} "
+          commit-message: "robot Update changelog-${latest_release}.md to branch ${{ env.MERGE_BRANCH }} "
+          branch-suffix: timestamp
+          branch: robot/update_chart
+          delete-branch: true
+          base: ${{ env.MERGE_BRANCH }}
+          signoff: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ${{ env.PR_LABEL }}
+          reviewers: ${{ env.PR_REVIWER }}
+
+  chart-release:
+    name: Create Chart Release
+    runs-on: ubuntu-latest
+    needs: [call-bin-workflow,call-image-workflow]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          # Fetch entire history. Required for chart-releaser; see https://github.com/helm/chart-releaser-action/issues/13#issuecomment-602063896
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Chart releaser
+        run: |
+          # Download chart releaser
+          curl -sSLo cr.tar.gz "https://github.com/helm/chart-releaser/releases/download/v1.4.1/chart-releaser_1.4.1_linux_amd64.tar.gz"
+          tar -xzf cr.tar.gz
+          rm -f cr.tar.gz
+          repo=$(basename "$GITHUB_REPOSITORY")
+          owner=$(dirname "$GITHUB_REPOSITORY")
+          tag="${GITHUB_REF_NAME:1}"
+
+          exists=$(curl -s -H "Accept: application/vnd.github.v3+json" https://github.com/$GITHUB_REPOSITORY/releases/tag/$repo-chart-$tag -w %{http_code} -o /dev/null)
+          if [[ $exists != "200" ]]; then
+            echo "Creating release..."
+            # package chart
+            ./cr package charts/meta-plugins
+            # upload chart to github releases
+            ./cr upload \
+                --owner "$owner" \
+                --git-repo "$repo" \
+                --release-name-template "{{ .Name }}-chart-{{ .Version }}" \
+                --token "${{ secrets.GITHUB_TOKEN }}"
+            # Update index and push to github pages
+            ./cr index \
+                --owner "$owner" \
+                --git-repo "$repo" \
+                --index-path index.yaml \
+                --release-name-template "{{ .Name }}-chart-{{ .Version }}" \
+                --push
+          else
+            echo "Release already exists"
+          fi
