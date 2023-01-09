@@ -133,25 +133,25 @@ function install_cilium() {
 #  fi
   helm repo add cilium https://helm.cilium.io
 
-#  HELM_IMAGES_LIST=` helm template test cilium/cilium --version ${CILIUM_VERSION} ${CILIUM_HELM_OPTIONS} | grep " image: " | tr -d '"'| awk '{print $2}' | uniq `
-#
-#  [ -z "${HELM_IMAGES_LIST}" ] && echo "can't found image of spiderpool" && exit 1
-#  LOCAL_IMAGE_LIST=`docker images | awk '{printf("%s:%s\n",$1,$2)}'`
-#
-#  for IMAGE in ${HELM_IMAGES_LIST}; do
-#    found=false
-#    for LOCAL_IMAGE in ${LOCAL_IMAGE_LIST}; do
-#      if [ "${IMAGE}" == "${LOCAL_IMAGE}" ]; then
-#          found=true
-#      fi
-#    done
-#    if [ "${found}" == "false" ] ; then
-#        echo "===> docker pull ${IMAGE}... "
-#        docker pull ${IMAGE}
-#    fi
-#    echo "===> load image ${IMAGE} to kind..."
-#    kind load docker-image ${IMAGE} --name ${IP_FAMILY}
-#  done
+  HELM_IMAGES_LIST=` helm template test cilium/cilium --version ${CILIUM_VERSION} ${CILIUM_HELM_OPTIONS} | grep " image: " | tr -d '"'| awk '{print $2}' | uniq `
+
+  [ -z "${HELM_IMAGES_LIST}" ] && echo "can't found image of spiderpool" && exit 1
+  LOCAL_IMAGE_LIST=`docker images | awk '{printf("%s:%s\n",$1,$2)}'`
+
+  for IMAGE in ${HELM_IMAGES_LIST}; do
+    found=false
+    for LOCAL_IMAGE in ${LOCAL_IMAGE_LIST}; do
+      if [ "${IMAGE}" == "${LOCAL_IMAGE}" ]; then
+          found=true
+      fi
+    done
+    if [ "${found}" == "false" ] ; then
+        echo "===> docker pull ${IMAGE}... "
+        docker pull ${IMAGE}
+    fi
+    echo "===> load image ${IMAGE} to kind..."
+    kind load docker-image ${IMAGE} --name ${IP_FAMILY}
+  done
 
   # Install cilium
   helm install cilium cilium/cilium --wait -n kube-system --kubeconfig ${E2E_KUBECONFIG} ${CILIUM_HELM_OPTIONS} --version ${CILIUM_VERSION}
